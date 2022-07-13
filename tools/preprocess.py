@@ -106,6 +106,8 @@ def get_preprocessors(path):
     preprocessors = OrderedDict()
     for pattern, actions in config['filters'].items():
         if fnmatch(path, pattern):
+            if 'skip-preprocessing' in actions:
+                continue
             for action in actions:
                 enable = not action.startswith('no-')
                 if not enable:
@@ -120,8 +122,6 @@ def get_preprocessors(path):
                         except:
                             pass
                     preprocessors[action] = enable
-        if 'skip-preprocessing' in actions:
-            return ()
 
     return tuple(preprocessors)
 
@@ -235,11 +235,11 @@ def preprocess(path, preprocessors):
 
     src_abs = os.path.join(args.src_dir, path)
     dst_abs = os.path.join(args.dst_dir, path)
-    if os.path.isdir(src_abs):
-        os.mkdir(dst_abs)
-    else:
-        os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
 
+    # create necessary directories if missing
+    os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
+
+    if os.path.isfile(src_abs):
         with open(src_abs, 'rb') as f:
             data = f.read()
 
@@ -251,6 +251,10 @@ def preprocess(path, preprocessors):
             command = config['preprocessors'][preprocessor]['command']
             if command[0].startswith('tools/'):
                 command[0] = os.path.join(script_dir, command[0][6:])
+            # These are implemented as `.cmd` files on Windows, which explicitly
+            # requires them to be run under `cmd /c`
+            if os.name == 'nt':
+                command = ["cmd", "/c"] + command
             process = subprocess.Popen(command, stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE, shell=True)
             data = process.communicate(input=data)[0]
